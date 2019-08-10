@@ -1,0 +1,217 @@
+---
+title: "Week 4 Quiz"
+author: "Hussain Alsalman"
+date: "5/20/2019"
+output: html_document
+---
+#we ask you to complete the analysis of what sorts of people were likely to survive. In particular, we ask you to apply the tools of machine learning to predict which passengers survived the tragedy
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# Attach the libraries you will need 
+library("tidyverse")
+library("ggplot2")
+library("here")
+```
+
+## Titanic Story 
+
+<br>
+
+```{r titanic-image,out.width='70%', fig.align='center'}
+knitr::include_graphics(path = "https://media.nationalgeographic.org/assets/photos/000/273/27302.jpg")
+```
+
+<br>
+
+The sinking of the RMS Titanic is one of the most infamous shipwrecks in history.  On April 15, 1912, during her maiden voyage, the Titanic sank after colliding with an iceberg, killing 1502 out of 2224 passengers and crew. This sensational tragedy shocked the international community and led to better safety regulations for ships.
+
+One of the reasons that the shipwreck led to such loss of life was that there were not enough lifeboats for the passengers and crew. Although there was some element of luck involved in surviving the sinking, some groups of people were more likely to survive than others, such as women, children, and the upper-class.
+
+In this challenge, we ask you to complete the analysis of what sorts of people were likely to survive. In particular, we ask you to apply the tools of machine learning to predict which passengers survived the tragedy.
+
+## Exploring the data 
+
+In order to start with our task. We need to first read the data and understand it. In the `datasets` folder, you will find both the training dataset (`titanic_train.csv`) and the testing dataset (`titanic_test.csv`). Perform the ncessary analysis to understand the data better. In the following exercises you will get to see
+
+*Note* : You can find [data description here](https://www.kaggle.com/c/titanic/data)
+
+#First - Reading the data 
+
+```{r reading-data, message=FALSE}
+## Reading train and test data 
+## train data 
+file_path_tr <- here("datasets", "titanic_train.csv")
+file_path_te <- here("datasets", "titanic_test.csv")
+
+train_df <- read_csv(file = file_path_tr)
+test_df <- read_csv(file = file_path_te)
+```
+
+#Second - Exploring the data structure  
+
+After reading the data we would like to explore them and get an idea about them. We can use `str()` function or `glimpse()` from `dplyr` package.
+
+```{r data-structure, message=FALSE}
+## Explor data structure 
+glimpse(train_df)
+
+
+
+```
+
+
+### Discuss your understanding about the data 
+
+- the trainig set called (train_df) has 12 variables, 7 numreic and 5 character
+- Numeric data are : passengerid, survived, pclass, age, sibsp, parch, fare
+- character data are: name, sex, ticket, cabin, embarcked 
+- categorical data are: sex, survived, embarcked, pclass
+* meaning of some columns: 
+1. embarked is Port of Embarkation (C = Cherbourg, Q = Queenstown, S = Southampton )
+2. sibsp is Number of Siblings (between 0-8)
+3. parch is Number of Parents/Children (between 0-6)
+4. Fare is the money that passenger has to pay (between 0-550)
+5. pclass is Passenger Class (between 0-3 so, 1 = 1st; 2 = 2nd; 3 = 3rd)
+6. survived (between 0-1 so, 0 = No; 1 = Yes)
+
+- total passenger in training set is : 891
+- the target variable is (survived)  because we want to predict which passengers were survived 
+- there are missing data with (NA) value 
+- 
+- 
+
+##Third| p1 -  Handeling missing data
+
+It seems that we have few missing data. Let's explor how many and what percentage of the total records.
+
+```{r}
+# number of missing data 
+apply(train_df, MARGIN = 2, function(x){sum(is.na(x))})
+#percentage of missing data 
+apply(train_df, MARGIN = 2, function(x){
+  round(sum(is.na(x))/dim(train_df)[1],2)})
+
+```
+#Explain: 
+#MARGIN is one of the arguments in apply () function, we use it  to define where to apply the function ( on row or on column) it takes values between 1 and 2 , 1 for row and two for column. So,
+#MARGIN=2 means the manipulation is performed on columns
+#number of missing data 
+#there is missing data in:
+# Age variable           | count = 177, percentage = 20% 
+#Cabin variable         | count= 687, percentage = 77% 
+#Embarked variable | count= 2,     percentage = 0% 
+#How important are they? 
+#Age variable is important variable to predict who survived (because As shown in the introduction: one of the groups of people were more likely to survive is children) and the Percentage of missing fields are 20% so we have to try to fill the gaps. 
+#Cabin variable is important too, with same reason ( As shown in the introduction: one of the groups of people were more likely to survive is Upper-Class ), But the Percentage of missing fields are 77% so its hard to fill. 
+#Embarked variable is not important to the target prediction, rather than its about two missing data. 
+#Sex variable has non missing data, but we have to mention it because it is important variable to predict who survived (As shown in the introduction: one of the groups of people were more likely to survive is women)  
+
+
+```{r}
+library("visdat")
+library("naniar")
+# We will drop the Cabin because it has 70% missing data. However, we would like to keep the Age. Therefore, we will try to impute the values with KNN method. 
+vis_miss(train_df)
+
+
+```
+
+#Explain:
+#Library visdat provides tools to create heatmap visualizations of data frame. And its  provides 2 main functions: vis_dat and vis_miss
+#Library naniar provides principled, tidy ways to summaries, visualize, and manipulate missing data with minimal deviations from the workflows in ggplot2 and tidy data. (From CRAN R project) one of its tools to Visualizing missing data is geom_miss_point()  it will shift the missing values to be 10% below the minimum value. The missing values will be shown with a different color so that missingness becomes pre-attentive. 
+
+
+
+#Third| p2 - Invistigating missing data 
+
+There is abnormal trend in the missing data in comparison with the non missing data. Therefore, we can use models to impute the values. 
+Here we will use the median
+
+```{r}
+ggplot(train_df, mapping = aes(x =Cabin, y = Age)) + geom_miss_point() + coord_flip() + facet_grid(Sex~Survived)
+```
+#Explain:
+#Here ggplot used to create graph for Cabin and Age on X and Y axes to show missing and non-missing data in these variables  
+# allows drawing of data points anywhere on the plot, coord_flip()
+#facet_grid() forms a matrix of panels defined by row and column faceting variables, It is most useful when you have two discrete variables.. there is a different ways to use it, we can use it represent raw or column or both of them.. in these example we use facet_grid() to represent sex on rows( with values male – female) and survival on columns (with value 0-1)
+
+
+```{r}
+
+ggplot(data = train_df, mapping = aes(x = Age)) + geom_histogram() + facet_grid(.~Pclass)
+
+ag_median <- median(train_df$Age, na.rm = TRUE)
+# we make new copy of the clean data
+train_df_cl <- train_df
+train_df_cl[which(is.na(train_df_cl$Age)),"Age"] <- ag_median
+```
+
+#Explain:
+#Here ggplot used to create graph for Ages on X axis and Count of them on Y axis +
+#, The next layer we used Histogram [that Visualize the distribution of a single continuous variable by dividing the x axis into bins and counting the number of observations in each bin] , so by using geom_histogram the counts will display with bar
+#Then we used facet_grid to place (Pclass Variable) as a column
+#Next we take the median of age and removed the NA values in this column with a new variable called ag_median
+#Next we made a new copy of the clean data which called train_df_cl
+
+
+
+
+##Fourthly - Feature selection 
+
+We will keep Fare, Sex and Age and number of siblings and parents. The rest might have value for us but will require text processing which is out of the scoop of this course. 
+
+```{r}
+
+train_df_cl
+
+```
+
+
+#lets take a look on test_df
+# = we will see that the Survived column is not present in Test data,, because we have to train our model using train data to make predictions for Survival on Test data
+
+```{r}
+
+head(test_df)
+
+```
+
+
+
+#Fifth - Choosing and fitting the model 
+Because we have both categorical and continuous variables we will use Logistic Regression
+
+```{r}
+
+model <- glm(Survived ~ Sex+ Age+ Fare+ SibSp+ Parch, data=train_df_cl,family=binomial )
+
+
+```
+
+```{r}
+summary(model)
+
+```
+#As we see sex variable has the lowest value with – 14 for male, which means men are less fortunate to survive than women  
+
+
+
+
+#Sixthly - prediction
+
+```{r}
+predict(model, newdata = test_df, type = "response")
+                                  
+
+```
+
+
+
+
+
+
+
+
+
+
